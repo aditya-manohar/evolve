@@ -12,6 +12,7 @@ import urllib.parse
 import whois
 from zxcvbn import zxcvbn
 import math
+import re
 
 init(autoreset=True)
 
@@ -197,22 +198,45 @@ class WebSec:
             "| cat /etc/passwd",
             "; ls",
             "&& ls",
-            "| ls"
+            "| ls",
+            "`cat /etc/passwd`",     
+            "; whoami",                
+            "&& whoami",
+            "| whoami"
         ]
         
         print("\nTesting for Command Injection...")
         found_vulnerability = False
         severity = "None"
+        
         for payload in payloads:
             try:
                 response = requests.get(self.url, params={'input': payload}, timeout=5)
-                if response.status_code == 200 and any(indicator in response.text.lower() for indicator in ["root:", "bin/bash", "usr"]):
-                    severity = "High"
-                    print(f"{Fore.RED}Potential Command Injection vulnerability detected with payload: {payload}{Style.RESET_ALL}")
-                    found_vulnerability = True
+                if response.status_code == 200:
+                    response_text = response.text.lower()
+                    if any(indicator in response_text for indicator in ["root:", "user:", "etc/passwd", "etc/shadow"]):
+                        severity = "High"
+                        print(f"{Fore.RED}Potential Command Injection vulnerability detected with payload: {payload}{Style.RESET_ALL}")
+                        found_vulnerability = True
+
+                    elif any(indicator in response_text for indicator in ["linux", "ubuntu", "kernel"]):
+                        severity = "Medium"
+                        print(f"{Fore.YELLOW}Potential exposure of system information detected with payload: {payload}{Style.RESET_ALL}")
+                        found_vulnerability = True
+
+                    elif any(indicator in response_text for indicator in ["command not found", "syntax error"]):
+                        severity = "Medium"
+                        print(f"{Fore.YELLOW}Potential command execution issue detected with payload: {payload}{Style.RESET_ALL}")
+                        found_vulnerability = True
+
+                    elif "path=" in response_text:
+                        severity = "Medium"
+                        print(f"{Fore.YELLOW}Potential exposure of environment variables detected with payload: {payload}{Style.RESET_ALL}")
+                        found_vulnerability = True
+
             except Exception as e:
-                print(f"Error while testing payload '{payload}': {e}")
-        
+                print(f"Error while testing payload '{payload}' : {e}")
+
         if not found_vulnerability:
             print(f"\n{Fore.GREEN}No Command Injection vulnerabilities found.{Style.RESET_ALL}\n")
         else:
@@ -248,6 +272,37 @@ class WebSec:
         else:
             print(f"{Fore.GREEN}No open ports detected.{Style.RESET_ALL}")
         print(f"{Fore.GREEN}Open ports testing completed.\n")
+
+    def find_api_keys(self,url):
+        response = requests.get(url)
+        if response.status_code == 200:
+            source_code = response.text 
+
+            api_key_patterns = [ 
+            r'AKIA[0-9A-Z]{16}',
+            r'[^A-Za-z0-9](?P<key>[A-Za-z0-9]{40})',
+            r'AIza[0-9A-Za-z-_]{35}', 
+            r'sk_[0-9a-zA-Z]{32}',    
+            r'pk_[0-9a-zA-Z]{32}',
+            r'v=[0-9a-zA-Z-_]{20,30}',
+            ]
+        
+            found_keys = []
+            for pattern in api_key_patterns:
+                matches = re.findall(pattern, source_code)
+                found_keys.extend(matches)
+
+            if found_keys:
+                print(Fore.RED + "API Keys found:" + Style.RESET_ALL)
+                for idx, key in enumerate(found_keys, start=1):
+                    print(f"{idx} - {key}")
+            else:
+                print(Fore.GREEN + "No API keys found." + Style.RESET_ALL)
+
+            return found_keys
+        else:
+            print(Fore.YELLOW+"Failed to retrieve URL"+Style.RESET_ALL)
+            return []
 
 def calc_entropy(file_path):
     with open(file_path,'rb') as f:
@@ -465,6 +520,7 @@ def main():
 """
 
     global loading
+
     while True:
         command = input(Fore.GREEN + "\nevolve>> " + Style.RESET_ALL).strip().lower()
 
@@ -514,6 +570,15 @@ def main():
             loading = False
             time.sleep(0.5)
 
+            loading = True
+            loading_thread = threading.Thread(target=loading_animation, args=("Searching for API keys...",))
+            loading_thread.start()
+            api_keys = tester.find_api_keys(url)
+            loading = False
+            loading_thread.join()
+            time.sleep(0.5)
+
+    
         elif command == "sys scan":
             sys_scan()
 
