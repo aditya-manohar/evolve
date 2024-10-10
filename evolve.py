@@ -11,6 +11,7 @@ import shutil
 import urllib.parse
 import whois
 from zxcvbn import zxcvbn
+import math
 
 init(autoreset=True)
 
@@ -65,10 +66,11 @@ class WebSec:
         for payload in payloads:
             try:
                 response = requests.get(self.url, params={'input': payload}, timeout=5)
-                if response.status_code == 200 and "error" not in response.text.lower():
-                    severity = "High"
-                    print(f"{Fore.RED}Potential SQL Injection vulnerability detected with payload: {payload}{Style.RESET_ALL}")
-                    found_vulnerability = True
+                if response.status_code == 200:
+                    if "error" in response.text.lower() or "sql" in response.text.lower():
+                        severity = "High"
+                        print(f"{Fore.RED}Potential SQL Injection vulnerability detected with payload: {payload}{Style.RESET_ALL}")
+                        found_vulnerability = True
             except Exception as e:
                 print(f"Error while testing payload '{payload}': {e}")
         
@@ -92,12 +94,13 @@ class WebSec:
         print("\nTesting for XSS...")
         found_vulnerability = False
         severity = "None"
+
         for payload in payloads:
             try:
                 response = requests.get(self.url, params={'input': payload}, timeout=5)
 
-                if response.status_code == 200:
-                    if payload in response.text or "alert(1)" in response.text:
+                if response.status_code == 200 and 'text/html' in response.headers.get('Content-Type',''):
+                    if payload in response.text or "alert(1)" in response.text or 'onerror' in response.text or 'onload' in response.text:
                         severity = "High"
                         print(f"{Fore.RED}Potential XSS vulnerability detected with payload: {payload}{Style.RESET_ALL}")
                         found_vulnerability = True
@@ -110,6 +113,69 @@ class WebSec:
             print(f"{Fore.RED}XSS severity: {severity}{Style.RESET_ALL}\n")
         print(f"{Fore.GREEN}XSS testing completed.")
 
+    def test_reflected_xss(self):
+        reflected_payloads = [
+            "<script>alert('Reflected xss');</script>",
+            "'><script>alert('Reflected xss');</script>",
+            "';alert('Reflected XSS 3');//"
+        ]
+        print("\nTesting for Reflected XSS...")
+        for payload in reflected_payloads:
+            try:
+                response = requests.get(f"{self.url}?input={payload}",timeout=5)
+                if payload in response.text:
+                    print(f"{Fore.RED}Potential Reflected XSS vulnerability detected with payload: {payload}{Style.RESET_ALL}")
+                else:
+                    print(f"{Fore.GREEN}No Reflected XSS vulnerability found for payload: {payload}{Style.RESET_ALL}")
+
+            except Exception as e:
+                print(f"Error while testing for reflected XSS : {e}")
+
+    def test_stored_xss(self):
+        stored_payloads = [
+        "<script>alert('Stored XSS 1');</script>",
+        "<img src=x onerror=alert('Stored XSS 2')>",
+        "';alert('Stored XSS 3');//",
+        "<svg/onload=alert('Stored XSS 4')>",
+        "<iframe src='javascript:alert(\"Stored XSS 5\")'></iframe>"
+            ]    
+        print("\nTesting for Stored XSS...") 
+        for payload in stored_payloads:  
+            try:
+                response_post = requests.post(f"{self.url}/comments", data={'comment': payload}, timeout=5)
+                if response_post.status_code == 200:
+                    response_get = requests.get(f"{self.url}/comments",timeout=5)
+                    if payload in response_get.text:
+                        print(f"{Fore.RED}Potential Stored XSS vulnerability detected with payload :{post_payload}{Style.RESET_ALL}")
+                    else:
+                        print(f"{Fore.GREEN}No stored XSS vulnerability found.{Style.RESET_ALL}")
+            except Exception as e:
+                print(f"Error while testing for stored XSS: {e}")
+
+
+    def test_dom_xss(self):
+        dom_payloads = [
+            "javascript:alert('DOM XSS')",
+            "javascript:alert(document.cookie)",
+            "<script>alert('DOM XSS');</script>",
+            "<svg/onload=alert('DOM XSS')>"
+        ]
+        print("\nTesting for DOM XSS...")
+        for payload in dom_payloads:
+            try:
+                response = requests.get(f"{self.url}?param={payload}", timeout=5)
+                if payload in response.text:
+                    print(f"{Fore.RED}Potential DOM XSS vulnerability detected with payload: {payload}{Style.RESET_ALL}")
+                else:
+                    print(f"{Fore.GREEN}No DOM XSS vulnerability found for payload: {payload}{Style.RESET_ALL}")
+            except Exception as e:
+                print(f"Error while testing for DOM XSS: {e}")
+
+    def run_tests(self):
+        self.test_reflected_xss()
+        self.test_stored_xss()
+        self.test_dom_xss()
+        
     def test_csrf(self):
         print("\nTesting for CSRF...")
         session = requests.Session()
@@ -183,24 +249,22 @@ class WebSec:
             print(f"{Fore.GREEN}No open ports detected.{Style.RESET_ALL}")
         print(f"{Fore.GREEN}Open ports testing completed.\n")
 
+def calc_entropy(file_path):
+    with open(file_path,'rb') as f:
+        data = f.read()
+        if len(data) == 0:
+            return 0
+        prob = [float(data.count(byte))/len(data) for byte in range(256)] 
+        entropy = -sum(p*math.log2(p) for p in prob if p>0)
+        return entropy 
+
 def sys_scan():
     print(Fore.GREEN+"Scanning the system for malicious files and software...\n")
 
     malicious_files = []
-    suspicious_extensions = ['.bat', '.vbs', '.scr', '.pif', '.com']
-    
-    excluded_directories = [
-        'C:\\Windows', 
-        'C:\\Program Files', 
-        'C:\\Program Files (x86)',
-        'C:\\ProgramData',
-        'C:\\Users\\Public'
-    ]
+    suspicious_extensions = ['.bat', '.vbs', '.scr', '.pif']
 
-    for root, dirs, files in os.walk('C:\\'):  
-        if any(root.startswith(excluded_dir) for excluded_dir in excluded_directories):
-            continue
-        
+    for root,files in os.walk('C:\\'):  
         for file in files:
             file_path = os.path.join(root, file)
             truncated_path = (file_path[:75] + '...') if len(file_path) > 75 else file_path
@@ -208,7 +272,9 @@ def sys_scan():
 
             if any(file.endswith(ext) for ext in suspicious_extensions):
                 malicious_files.append(file_path)
-    
+                entropy = calc_entropy(file_path)
+                if entropy > 7.5:
+                    malicious_files.append((file_path,"High Entropy"))
     print(Fore.GREEN+"\n\nScan complete!")
 
     if malicious_files:
@@ -238,7 +304,7 @@ def loading_animation(task_description):
         time.sleep(0.1)
 
 def evolve_search(name):
-    query = (f'"{name}" site:instagram.com OR site:facebook.com OR filetype:pdf  OR filetype:xls OR filetype:csv OR filetype:docx ')
+    query = (f'"{name}" site:instagram.com OR site:facebook.com OR filetype:pdf OR filetype:xls OR filetype:csv OR filetype:docx ')
     encoded_query = urllib.parse.quote(query)
     url = f"https://www.google.com/search?q={encoded_query}"
     headers = {
@@ -304,7 +370,6 @@ def run_script(script_path):
     if not os.path.exists(script_path):
         print(Fore.RED + f"Error: The script '{script_path}' does not exist." + Style.RESET_ALL)
         return
-
     if script_path.endswith('.py'):
         os.system(f'python "{script_path}"')
     elif script_path.endswith('.bat'):
@@ -318,7 +383,7 @@ def ip_geolocation(ip_address):
     
     response = requests.get(url)
     
-    if response.status_code == 200:
+    if response.status_code == 200 :
         data = response.json()
         country = data.get("country", "N/A")
         city = data.get("city", "N/A")
@@ -432,8 +497,8 @@ def main():
             time.sleep(0.5)
     
             loading = True
-            threading.Thread(target=loading_animation, args=("Testing for XSS...",)).start()
-            tester.test_xss()
+            threading.Thread(target=loading_animation, args=("Testing for Reflected XSS...",)).start()
+            tester.run_tests()
             loading = False
             time.sleep(0.5)
 
@@ -530,7 +595,7 @@ def main():
         
         elif command == "exit":
             sys.exit()
-        
+
         else:
             exit_code = os.system(command)
             if exit_code != 0 :
