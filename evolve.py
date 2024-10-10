@@ -219,7 +219,7 @@ class WebSec:
             print(f"{Fore.RED}Command Injection severity: {severity}{Style.RESET_ALL}\n")
         print(f"{Fore.GREEN}Command Injection testing completed.")
 
-    def test_open_ports(self):
+    def scan_open_ports(self):
         common_ports = {
             21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS',
             80: 'HTTP', 110: 'POP3', 143: 'IMAP', 443: 'HTTPS', 3306: 'MySQL',
@@ -485,7 +485,7 @@ def main():
             loading = True
             loading_thread = threading.Thread(target=loading_animation, args=("Scanning for open ports...",))
             loading_thread.start()
-            tester.test_open_ports()
+            tester.scan_open_ports()
             loading = False
             loading_thread.join() 
             time.sleep(0.5)
