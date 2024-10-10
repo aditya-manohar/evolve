@@ -14,6 +14,7 @@ Evolve is a comprehensive security tool designed for basic web security testing 
 - Online information searching
 - Password strength evaluation
 - IP geolocation lookup
+- API key 
 
 ## Requirements
 
@@ -24,7 +25,8 @@ Evolve is a comprehensive security tool designed for basic web security testing 
   - `colorama`
   - `whois`
   - `zxcvbn`
+  - `paramiko`
 
 You can install the required libraries using pip:
 
-pip install requests beautifulsoup4 colorama python-whois zxcvbn
+pip install requests beautifulsoup4 colorama paramiko python-whois zxcvbn

