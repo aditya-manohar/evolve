@@ -260,7 +260,7 @@ class WebSec:
         print(f"{Fore.GREEN}Open ports testing completed.\n")
 
     def find_api_keys(self,url):
-        response = requests.get(url)
+        response = requests.get(url,timeout=20)
         if response.status_code == 200:
             source_code = response.text 
 

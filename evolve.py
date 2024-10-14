@@ -15,6 +15,7 @@ import math
 import re
 import paramiko
 from dotenv import load_dotenv
+import ast
 
 from websec import WebSec
 
@@ -82,11 +83,11 @@ def loading_animation(task_description):
 def hunter(name):
     query = (f'"{name}" site:instagram.com OR site:facebook.com OR filetype:pdf OR filetype:xls OR filetype:csv OR filetype:docx ')
     encoded_query = urllib.parse.quote(query)
-    url = f"https://www.google.com/search?q={encoded_query}"
+    url = f"https://www.google.com/search?q={encoded_query}&num=10"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36"
     }
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers,timeout=15)
     
     if response.status_code == 200:
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -108,7 +109,7 @@ def search_web(query):
     }
 
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status() 
 
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -416,9 +417,14 @@ def main():
                   """)
             name = input("Enter the name : ")
             results = hunter(name)
-            print(Fore.GREEN+"Search Results : "+Style.RESET_ALL)
-            for link in results:
-                print(Fore.LIGHTCYAN_EX+" * ",link)
+
+            if results:
+                print(Fore.GREEN+"Search Results : "+Style.RESET_ALL)
+                for i,link in enumerate(results,start=1):
+                    print(Fore.LIGHTCYAN_EX+f"{i}. {link}")
+
+            else:
+                print(Fore.RED + "No results found." + Style.RESET_ALL)
 
         elif command == "run cracker":
             print(Fore.RED+"""                                                                       
@@ -466,8 +472,18 @@ def main():
             query = input("What should I search for : ")
             results = search_web(query)
             print(Fore.GREEN + "Search Results : "+Style.RESET_ALL)
-            for summary in results:
-                print(summary)
+            
+            if results:
+                for index, result in enumerate(results, start=1):
+                    title = result['title']
+                    link = result['link']
+                    summary = result['summary']
+                    print(Fore.LIGHTCYAN_EX + f"{index}. {title}" + Style.RESET_ALL)
+                    print(Fore.YELLOW + f"   Link: {link}" + Style.RESET_ALL)
+                    print(Fore.WHITE + f"   Summary: {summary}\n" + Style.RESET_ALL)
+
+            else:
+                print(Fore.RED + "No results found." + Style.RESET_ALL)
 
         elif command.startswith("run script"):
             script_path = command[len("run script "):].strip()
@@ -497,7 +513,7 @@ def main():
                 if expression.lower() == "quit":
                     break
                 try:
-                    result = eval(expression)
+                    result = ast.literal_eval(expression)
                     print(Fore.CYAN + f"{result}"+Style.RESET_ALL)
                 except Exception as e:
                     print(Fore.RED + "Enter valid input for calculation")
